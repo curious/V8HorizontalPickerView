@@ -27,6 +27,7 @@ typedef enum {
 
 // what font to use for the element labels?
 @property (nonatomic, strong) UIFont *elementFont;
+@property (nonatomic, strong) UIFont *selectedElementFont;
 
 // color of labels used in picker
 @property (nonatomic, strong) UIColor *textColor;
@@ -62,6 +63,8 @@ typedef enum {
 @interface V8HorizontalPickerLabel : UILabel <V8HorizontalPickerElementState> { }
 
 @property (nonatomic, assign) BOOL selectedElement;
+@property (nonatomic, strong) UIFont *selectedStateFont;
+@property (nonatomic, strong) UIFont *normalStateFont;
 @property (nonatomic, strong) UIColor *selectedStateColor;
 @property (nonatomic, strong) UIColor *normalStateColor;
 

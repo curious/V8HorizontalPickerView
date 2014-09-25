@@ -61,6 +61,7 @@
 
 	self.textColor   = [UIColor blackColor];
 	self.elementFont = [UIFont systemFontOfSize:12.0f];
+    self.selectedElementFont = [UIFont systemFontOfSize:12.0f];
 
 	_currentSelectedIndex     = -1; // nothing is selected yet
 	_numberOfElements         = 0;
@@ -455,6 +456,8 @@
 	elementLabel.text            = title;
 	elementLabel.font            = self.elementFont;
 
+    elementLabel.normalStateFont = self.elementFont;
+    elementLabel.selectedStateFont = self.selectedElementFont;
 	elementLabel.normalStateColor   = self.textColor;
 	elementLabel.selectedStateColor = self.selectedTextColor;
 
@@ -715,8 +718,10 @@
 	if (self.selectedElement != selected) {
 		if (selected) {
 			self.textColor = self.selectedStateColor;
+            self.font = self.selectedStateFont;
 		} else {
 			self.textColor = self.normalStateColor;
+            self.font = self.normalStateFont;
 		}
 		_selectedElement = selected;
 		[self setNeedsLayout];
