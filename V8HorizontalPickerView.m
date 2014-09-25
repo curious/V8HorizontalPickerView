@@ -16,8 +16,6 @@
 // collection of widths of each element.
 @property (nonatomic, strong) NSMutableArray *elementWidths;
 
-@property (nonatomic, assign) NSInteger elementPadding;
-
 // state keepers
 @property (nonatomic, assign) BOOL dataHasBeenLoaded;
 @property (nonatomic, assign) BOOL scrollSizeHasBeenSet;
