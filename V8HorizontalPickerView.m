@@ -344,17 +344,37 @@
 - (void)scrollToElement:(NSInteger)index animated:(BOOL)animate {
 	_currentSelectedIndex = index;
 	int x = [self centerOfElementAtIndex:index] - self.selectionPoint.x;
-	[_scrollView setContentOffset:CGPointMake(x, 0) animated:animate];
-
-	// notify delegate of the selected index
-	SEL delegateCall = @selector(horizontalPickerView:didSelectElementAtIndex:);
-	if (self.delegate && [self.delegate respondsToSelector:delegateCall]) {
-		[self.delegate horizontalPickerView:self didSelectElementAtIndex:index];
-	}
-
+    if (animate) {
+        [UIView animateWithDuration:0.2f animations:^(void) {
+            [_scrollView setContentOffset:CGPointMake(x, 0) animated:NO];
+        } completion:^(BOOL finished) {
+            if (finished) {
+                [_scrollView setContentOffset:CGPointMake(x, 0) animated:animate];
+                
+                // notify delegate of the selected index
+                SEL delegateCall = @selector(horizontalPickerView:didSelectElementAtIndex:);
+                if (self.delegate && [self.delegate respondsToSelector:delegateCall]) {
+                    [self.delegate horizontalPickerView:self didSelectElementAtIndex:index];
+                }
+                
 #if (__IPHONE_OS_VERSION_MAX_ALLOWED > __IPHONE_4_3)
-	[self setNeedsLayout];
+                [self setNeedsLayout];
 #endif
+            }
+        }];
+    } else {
+        [_scrollView setContentOffset:CGPointMake(x, 0) animated:animate];
+        
+        // notify delegate of the selected index
+        SEL delegateCall = @selector(horizontalPickerView:didSelectElementAtIndex:);
+        if (self.delegate && [self.delegate respondsToSelector:delegateCall]) {
+            [self.delegate horizontalPickerView:self didSelectElementAtIndex:index];
+        }
+        
+#if (__IPHONE_OS_VERSION_MAX_ALLOWED > __IPHONE_4_3)
+        [self setNeedsLayout];
+#endif
+    }
 }
 
 
