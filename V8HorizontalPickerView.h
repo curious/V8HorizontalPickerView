@@ -33,6 +33,8 @@ typedef enum {
 @property (nonatomic, strong) UIColor *textColor;
 @property (nonatomic, strong) UIColor *selectedTextColor; // color of current selected element
 
+@property (nonatomic, assign) CGFloat selectedBottomBorderWidth;
+
 // the point, defaults to center of view, where the selected element sits
 @property (nonatomic, assign) CGPoint selectionPoint;
 @property (nonatomic, strong) UIView *selectionIndicatorView;
@@ -69,5 +71,6 @@ typedef enum {
 @property (nonatomic, strong) UIFont *normalStateFont;
 @property (nonatomic, strong) UIColor *selectedStateColor;
 @property (nonatomic, strong) UIColor *normalStateColor;
+@property (nonatomic, assign) CGFloat selectedBottomBorderWidth;
 
 @end

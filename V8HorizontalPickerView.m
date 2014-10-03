@@ -82,6 +82,8 @@
 	self.autoresizesSubviews = YES;
     
     self.shouldCenterSelectedItem = YES;
+    
+    self.selectedBottomBorderWidth = 0.0f;
 }
 
 
@@ -527,6 +529,8 @@
     elementLabel.selectedStateFont = self.selectedElementFont;
 	elementLabel.normalStateColor   = self.textColor;
 	elementLabel.selectedStateColor = self.selectedTextColor;
+    
+    elementLabel.selectedBottomBorderWidth = self.selectedBottomBorderWidth;
 
 	// show selected status if this element is the selected one and is currently over selectionPoint
     if (self.shouldCenterSelectedItem) {
@@ -796,7 +800,17 @@
 		if (selected) {
 			self.textColor = self.selectedStateColor;
             self.font = self.selectedStateFont;
-		} else {
+
+            if (self.selectedBottomBorderWidth > 0) {
+                CALayer *layer = [self layer];
+                CALayer *bottomBorder = [CALayer layer];
+                bottomBorder.borderColor = [self textColor].CGColor;
+                bottomBorder.borderWidth = self.selectedBottomBorderWidth;
+                bottomBorder.frame = CGRectMake(-1, layer.frame.size.height - self.selectedBottomBorderWidth, layer.frame.size.width, self.selectedBottomBorderWidth);
+                [bottomBorder setBorderColor:[self textColor].CGColor];
+                [layer addSublayer:bottomBorder];
+            }
+        } else {
 			self.textColor = self.normalStateColor;
             self.font = self.normalStateFont;
 		}
