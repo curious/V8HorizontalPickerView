@@ -53,6 +53,8 @@ typedef enum {
 // padding between elements
 @property (nonatomic, assign) NSInteger elementPadding;
 
+@property (nonatomic, assign) BOOL shouldCenterSelectedItem;
+
 - (void)reloadData;
 - (void)scrollToElement:(NSInteger)index animated:(BOOL)animate;
 

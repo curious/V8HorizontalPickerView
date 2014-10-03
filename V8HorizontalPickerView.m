@@ -80,6 +80,8 @@
 	self.scrollEdgeViewPadding = 0.0f;
 
 	self.autoresizesSubviews = YES;
+    
+    self.shouldCenterSelectedItem = YES;
 }
 
 
@@ -90,7 +92,9 @@
 
 	if (CGPointEqualToPoint(self.selectionPoint, CGPointZero)) {
 		// default to the center
-		self.selectionPoint = CGPointMake(self.frame.size.width / 2, 0.0f);
+        if (self.shouldCenterSelectedItem) {
+            self.selectionPoint = CGPointMake(self.frame.size.width / 2, 0.0f);
+        }
 	}
 
 	if (!self.dataHasBeenLoaded) {
@@ -122,8 +126,10 @@
 				BOOL isSelected = (self.currentSelectedIndex == [self indexForElement:view]);
 				if (isSelected) {
 					// if this view is set to be selected, make sure it is over the selection point
-					NSInteger currentIndex = [self nearestElementToCenter];
-					isSelected = (currentIndex == self.currentSelectedIndex);
+                    if (self.shouldCenterSelectedItem) {
+                        NSInteger currentIndex = [self nearestElementToCenter];
+                        isSelected = (currentIndex == self.currentSelectedIndex);
+                    }
 				}
 				// casting to V8HorizontalPickerLabel so we can call this without all the NSInvocation jazz
 				[(V8HorizontalPickerLabel *)view setSelectedElement:isSelected];
@@ -194,8 +200,10 @@
 			[self scrollToElement:self.currentSelectedIndex animated:NO];
 		} else if (self.numberOfElements <= self.currentSelectedIndex) {
 			// if currentSelectedIndex no longer exists, select what is currently centered
-			_currentSelectedIndex = [self nearestElementToCenter];
-			[self scrollToElement:self.currentSelectedIndex animated:NO];
+            if (self.shouldCenterSelectedItem) {
+                _currentSelectedIndex = [self nearestElementToCenter];
+                [self scrollToElement:self.currentSelectedIndex animated:NO];
+            }
 		}
 	}
 }
@@ -343,37 +351,70 @@
 #pragma mark - Scroll To Element Method
 - (void)scrollToElement:(NSInteger)index animated:(BOOL)animate {
 	_currentSelectedIndex = index;
-	int x = [self centerOfElementAtIndex:index] - self.selectionPoint.x;
-    if (animate) {
-        [UIView animateWithDuration:0.2f animations:^(void) {
-            [_scrollView setContentOffset:CGPointMake(x, 0) animated:NO];
-        } completion:^(BOOL finished) {
-            if (finished) {
-                [_scrollView setContentOffset:CGPointMake(x, 0) animated:animate];
-                
-                // notify delegate of the selected index
-                SEL delegateCall = @selector(horizontalPickerView:didSelectElementAtIndex:);
-                if (self.delegate && [self.delegate respondsToSelector:delegateCall]) {
-                    [self.delegate horizontalPickerView:self didSelectElementAtIndex:index];
+    if (self.shouldCenterSelectedItem) {
+        int x = [self centerOfElementAtIndex:index] - self.selectionPoint.x;
+        if (animate) {
+            [UIView animateWithDuration:0.2f animations:^(void) {
+                [_scrollView setContentOffset:CGPointMake(x, 0) animated:NO];
+            } completion:^(BOOL finished) {
+                if (finished) {
+                    [_scrollView setContentOffset:CGPointMake(x, 0) animated:animate];
+                    
+                    // notify delegate of the selected index
+                    SEL delegateCall = @selector(horizontalPickerView:didSelectElementAtIndex:);
+                    if (self.delegate && [self.delegate respondsToSelector:delegateCall]) {
+                        [self.delegate horizontalPickerView:self didSelectElementAtIndex:index];
+                    }
+                    
+#if (__IPHONE_OS_VERSION_MAX_ALLOWED > __IPHONE_4_3)
+                    [self setNeedsLayout];
+#endif
                 }
-                
-#if (__IPHONE_OS_VERSION_MAX_ALLOWED > __IPHONE_4_3)
-                [self setNeedsLayout];
-#endif
+            }];
+        } else {
+            [_scrollView setContentOffset:CGPointMake(x, 0) animated:NO];
+            
+            // notify delegate of the selected index
+            SEL delegateCall = @selector(horizontalPickerView:didSelectElementAtIndex:);
+            if (self.delegate && [self.delegate respondsToSelector:delegateCall]) {
+                [self.delegate horizontalPickerView:self didSelectElementAtIndex:index];
             }
-        }];
-    } else {
-        [_scrollView setContentOffset:CGPointMake(x, 0) animated:animate];
-        
-        // notify delegate of the selected index
-        SEL delegateCall = @selector(horizontalPickerView:didSelectElementAtIndex:);
-        if (self.delegate && [self.delegate respondsToSelector:delegateCall]) {
-            [self.delegate horizontalPickerView:self didSelectElementAtIndex:index];
-        }
-        
+            
 #if (__IPHONE_OS_VERSION_MAX_ALLOWED > __IPHONE_4_3)
-        [self setNeedsLayout];
+            [self setNeedsLayout];
 #endif
+        }
+    } else {
+        CGRect selectFrame = [self frameForElementAtIndex:index];
+        if (animate) {
+            [UIView animateWithDuration:0.2f animations:^(void) {
+                [_scrollView scrollRectToVisible:selectFrame animated:NO];
+            } completion:^(BOOL finished) {
+                if (finished) {
+                    // notify delegate of the selected index
+                    SEL delegateCall = @selector(horizontalPickerView:didSelectElementAtIndex:);
+                    if (self.delegate && [self.delegate respondsToSelector:delegateCall]) {
+                        [self.delegate horizontalPickerView:self didSelectElementAtIndex:index];
+                    }
+                    
+#if (__IPHONE_OS_VERSION_MAX_ALLOWED > __IPHONE_4_3)
+                    [self setNeedsLayout];
+#endif
+                }
+            }];
+        } else {
+            [_scrollView scrollRectToVisible:selectFrame animated:NO];
+            
+            // notify delegate of the selected index
+            SEL delegateCall = @selector(horizontalPickerView:didSelectElementAtIndex:);
+            if (self.delegate && [self.delegate respondsToSelector:delegateCall]) {
+                [self.delegate horizontalPickerView:self didSelectElementAtIndex:index];
+            }
+            
+#if (__IPHONE_OS_VERSION_MAX_ALLOWED > __IPHONE_4_3)
+            [self setNeedsLayout];
+#endif
+        }
     }
 }
 
@@ -386,7 +427,9 @@
 		//		 cases so that the view state is properly preserved.
 
 		// set the current item under the center to "highlighted" or current
-		_currentSelectedIndex = [self nearestElementToCenter];
+        if (self.shouldCenterSelectedItem) {
+            _currentSelectedIndex = [self nearestElementToCenter];
+        }
 	}
 
 #if (__IPHONE_OS_VERSION_MAX_ALLOWED > __IPHONE_4_3)
@@ -401,14 +444,18 @@
 - (void)scrollViewDidEndDragging:(UIScrollView *)scrollView willDecelerate:(BOOL)decelerate {
 	// only do this if we aren't decelerating
 	if (!decelerate) {
-		[self scrollToElementNearestToCenter];
+        if (self.shouldCenterSelectedItem) {
+            [self scrollToElementNearestToCenter];
+        }
 	}
 }
 
 //- (void)scrollViewWillBeginDecelerating:(UIScrollView *)scrollView { }
 
 - (void)scrollViewDidEndDecelerating:(UIScrollView *)scrollView {
-	[self scrollToElementNearestToCenter];
+    if (self.shouldCenterSelectedItem) {
+        [self scrollToElementNearestToCenter];
+    }
 }
 
 - (void)scrollViewDidEndScrollingAnimation:(UIScrollView *)scrollView {
@@ -482,8 +529,10 @@
 	elementLabel.selectedStateColor = self.selectedTextColor;
 
 	// show selected status if this element is the selected one and is currently over selectionPoint
-	NSInteger currentIndex = [self nearestElementToCenter];
-	elementLabel.selectedElement = (self.currentSelectedIndex == index) && (currentIndex == self.currentSelectedIndex);
+    if (self.shouldCenterSelectedItem) {
+        NSInteger currentIndex = [self nearestElementToCenter];
+        elementLabel.selectedElement = (self.currentSelectedIndex == index) && (currentIndex == self.currentSelectedIndex);
+    }
 
 	return elementLabel;
 }
@@ -531,14 +580,22 @@
 
 	if (_scrollView) {
 		// create our scroll view as wide as all the elements to be included
-		_scrollView.contentSize = CGSizeMake(totalWidth, self.bounds.size.height);
+        // contentSize needs a non-zero width and height, otherwise, scrollRectToVisible
+        // won't work
+        _scrollView.contentSize = CGSizeMake(totalWidth, 1); //self.bounds.size.height);
 		self.scrollSizeHasBeenSet = YES;
 	}
 }
 
 // reset the content inset of the scroll view based on centering first and last elements.
 - (void)updateScrollContentInset {
-	// update content inset if we have element widths
+    // No need to set the content inset if we don't center the items, we'll just keep
+    // them with no margins on the left/right
+    if (!self.shouldCenterSelectedItem) {
+        return;
+    }
+
+    // update content inset if we have element widths
 	if ([self.elementWidths count] != 0) {
 		CGFloat scrollerWidth = _scrollView.frame.size.width;
 
@@ -711,7 +768,7 @@
 
 // move scroll view to position nearest element under the center
 - (void)scrollToElementNearestToCenter {
-	[self scrollToElement:[self nearestElementToCenter] animated:YES];
+    [self scrollToElement:[self nearestElementToCenter] animated:YES];
 }
 
 
