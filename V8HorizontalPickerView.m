@@ -586,7 +586,12 @@
 		// create our scroll view as wide as all the elements to be included
         // contentSize needs a non-zero width and height, otherwise, scrollRectToVisible
         // won't work
-        _scrollView.contentSize = CGSizeMake(totalWidth, 1); //self.bounds.size.height);
+        if (self.bounds.size.height <= 0) {
+            _scrollView.contentSize = CGSizeMake(totalWidth, 1); //self.bounds.size.height);
+        } else {
+            _scrollView.contentSize = CGSizeMake(totalWidth, self.bounds.size.height);
+        }
+        
 		self.scrollSizeHasBeenSet = YES;
 	}
 }
