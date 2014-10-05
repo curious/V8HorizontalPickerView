@@ -208,6 +208,16 @@
             }
 		}
 	}
+
+    if (!self.shouldCenterSelectedItem) {
+        if (_scrollView.frame.size.width > _scrollView.contentSize.width) {
+            CGFloat margin = (_scrollView.frame.size.width - _scrollView.contentSize.width) / 2.0;
+            [_scrollView setContentInset:UIEdgeInsetsMake(0.0, margin, 0.0, margin)];
+        } else {
+            [_scrollView setContentInset:UIEdgeInsetsZero];
+        }
+        [_scrollView setBounces:_scrollView.contentSize.width > _scrollView.frame.size.width];
+    }
 }
 
 
