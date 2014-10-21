@@ -84,6 +84,7 @@
 	self.autoresizesSubviews = YES;
     
     self.shouldCenterSelectedItem = YES;
+    self.autoAnimateTimeout = 5.0;
     
     self.selectedBottomBorderWidth = 0.0f;
 }
@@ -468,7 +469,7 @@
             [self.animateToVisibleTimer invalidate];
         }
         
-        _animateToVisibleTimer = [NSTimer scheduledTimerWithTimeInterval:5.0 target:self selector:@selector(animateToVisible) userInfo:nil repeats:NO];
+        _animateToVisibleTimer = [NSTimer scheduledTimerWithTimeInterval:self.autoAnimateTimeout target:self selector:@selector(animateToVisible) userInfo:nil repeats:NO];
     }
 }
 
