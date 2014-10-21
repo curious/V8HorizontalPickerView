@@ -25,6 +25,8 @@
 @property (nonatomic, assign) NSInteger firstVisibleElement;
 @property (nonatomic, assign) NSInteger lastVisibleElement;
 
+@property (nonatomic, strong) NSTimer *animateToVisibleTimer;
+
 @end
 
 
@@ -460,6 +462,14 @@
             [self scrollToElementNearestToCenter];
         }
 	}
+    
+    if (!self.shouldCenterSelectedItem) {
+        if (_animateToVisibleTimer) {
+            [self.animateToVisibleTimer invalidate];
+        }
+        
+        _animateToVisibleTimer = [NSTimer scheduledTimerWithTimeInterval:5.0 target:self selector:@selector(animateToVisible) userInfo:nil repeats:NO];
+    }
 }
 
 //- (void)scrollViewWillBeginDecelerating:(UIScrollView *)scrollView { }
@@ -474,6 +484,11 @@
 	self.scrollingBasedOnUserInteraction = NO;
 }
 
+- (void)animateToVisible
+{
+    [self.animateToVisibleTimer invalidate];
+    [self scrollToElement:self.currentSelectedIndex animated:YES];
+}
 
 #pragma mark - View Creation Methods (Internal Methods)
 - (void)addScrollView {
