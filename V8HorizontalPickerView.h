@@ -56,6 +56,7 @@ typedef enum {
 @property (nonatomic, assign) NSInteger elementPadding;
 
 @property (nonatomic, assign) BOOL shouldCenterSelectedItem;
+@property (nonatomic, assign) CGFloat autoAnimateTimeout;
 
 - (void)reloadData;
 - (void)scrollToElement:(NSInteger)index animated:(BOOL)animate;
