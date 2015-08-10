@@ -134,7 +134,10 @@
         
         // if the view doesn't intersect, it's not visible, so we can recycle it
         if (!CGRectIntersectsRect(scaledViewFrame, visibleBounds)) {
-            [view removeFromSuperview];
+            // NO view recycling for VO - breaks the system
+            if (!UIAccessibilityIsVoiceOverRunning()) {
+                [view removeFromSuperview];
+            }
         } else { // if it is still visible, update it's selected state
             if ([view respondsToSelector:setSelectedSelector]) {
                 // view's tag is it's index
@@ -153,14 +156,16 @@
     }
     
     // find needed elements by looking at left and right edges of frame
+    // We pre-load all the views if VO is running, otherwise this is painfully buggy.
     CGPoint offset = _scrollView.contentOffset;
-    NSInteger firstNeededElement = [self nearestElementToPoint:CGPointMake(offset.x, 0.0f)];
-    NSInteger lastNeededElement  = [self nearestElementToPoint:CGPointMake(offset.x + visibleBounds.size.width, 0.0f)];
+    NSInteger firstNeededElement = (UIAccessibilityIsVoiceOverRunning()) ? 0 : [self nearestElementToPoint:CGPointMake(offset.x, 0.0f)];
+    NSInteger lastNeededElement  = (UIAccessibilityIsVoiceOverRunning()) ? self.numberOfElements - 1 : [self nearestElementToPoint:CGPointMake(offset.x + visibleBounds.size.width, 0.0f)];
     
     // add any views that have become visible
     UIView *view = nil;
     CGRect tmpViewFrame = CGRectZero;
     CGPoint itemViewCenter = CGPointZero;
+    NSMutableArray *accessibilityElements = [NSMutableArray arrayWithCapacity:self.numberOfElements];
     for (NSInteger i = firstNeededElement; i <= lastNeededElement; i++) {
         view = nil; // paranoia
         view = [_scrollView viewWithTag:[self tagForElementAtIndex:i]];
@@ -185,9 +190,17 @@
                     // use the index as the tag so we can find it later
                     view.tag = [self tagForElementAtIndex:i];
                     [_scrollView addSubview:view];
+                    [accessibilityElements addObject:view];
                 }
             }
         }
+        
+    }
+    
+    /* We only want to set this once - we only reset it on a data reload,
+     Not for every layoutSubviews call. */
+    if (self.accessibilityElements == nil) {
+        self.accessibilityElements = accessibilityElements;
     }
     
     // add the left or right edge views if visible
@@ -359,6 +372,8 @@
     
     self.firstVisibleElement = NSIntegerMax;
     self.lastVisibleElement  = NSIntegerMin;
+    
+    self.accessibilityElements = nil;
     
     [self collectData];
 }
@@ -836,6 +851,11 @@
 }
 
 #pragma mark - Accessibility
+
+/* This auto scrolls our scroll view much like it would if it were a collection view.
+ As the user moves forward and backwards, we bring the next/prev elements into view
+ for VO.
+ */
 - (void) v8HorizontalPickerLabelDidBecomeAccessibilityFocused:(V8HorizontalPickerLabel *)label {
     
     const CGFloat scrollTriggerX = 10.0;
@@ -852,6 +872,7 @@
     if (!CGRectEqualToRect(labelFrame, scrollToFrame)) {
         [_scrollView scrollRectToVisible:scrollToFrame animated:YES];
         UIAccessibilityPostNotification(UIAccessibilityLayoutChangedNotification, label);
+        
     }
 }
 
