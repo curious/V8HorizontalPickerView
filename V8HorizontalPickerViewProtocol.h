@@ -25,6 +25,8 @@
 - (void)horizontalPickerView:(V8HorizontalPickerView *)picker didSelectElementAtIndex:(NSInteger)index;
 
 // one of these two methods must be defined
+// ACCESSIBILITY: Important note! Accessibility is only fully supported for titleForElementAtIndex!
+// Scrolling with VO enabled if using views will be poor and buggy.
 - (NSString *)horizontalPickerView:(V8HorizontalPickerView *)picker titleForElementAtIndex:(NSInteger)index;
 - (UIView *)horizontalPickerView:(V8HorizontalPickerView *)picker viewForElementAtIndex:(NSInteger)index;
 // any view returned from this must confirm to the V8HorizontalPickerElementState protocol

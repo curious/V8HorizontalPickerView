@@ -9,7 +9,18 @@
 
 
 #pragma mark - Internal Method Interface
-@interface V8HorizontalPickerView () {
+@class V8HorizontalPickerLabel;
+
+@protocol V8HorizontalPickerLabelAccessibilityDelegate <NSObject>
+- (void) v8HorizontalPickerLabelDidBecomeAccessibilityFocused:(V8HorizontalPickerLabel *)label;
+@end
+
+@interface V8HorizontalPickerLabel ()
+@property (nonatomic, weak) id<V8HorizontalPickerLabelAccessibilityDelegate> accessibilityDelegate;
+@end
+
+
+@interface V8HorizontalPickerView () <V8HorizontalPickerLabelAccessibilityDelegate> {
 	UIScrollView *_scrollView;
 }
 
@@ -28,7 +39,6 @@
 @property (nonatomic, strong) NSTimer *animateToVisibleTimer;
 
 @end
-
 
 #pragma mark - Implementation
 @implementation V8HorizontalPickerView : UIView
@@ -58,35 +68,35 @@
 
 - (void)initSetup {
 	self.elementWidths = [NSMutableArray array];
-
+	
 	[self addScrollView];
-
+	
 	self.textColor   = [UIColor blackColor];
 	self.elementFont = [UIFont systemFontOfSize:12.0f];
-    self.selectedElementFont = [UIFont systemFontOfSize:12.0f];
-
+	self.selectedElementFont = [UIFont systemFontOfSize:12.0f];
+	
 	_currentSelectedIndex     = -1; // nothing is selected yet
 	_numberOfElements         = 0;
-
+	
 	self.elementPadding       = 0;
 	self.dataHasBeenLoaded    = NO;
 	self.scrollSizeHasBeenSet = NO;
 	self.scrollingBasedOnUserInteraction = NO;
-
+	
 	self.selectionPoint = CGPointZero;
 	self.indicatorPosition = V8HorizontalPickerIndicatorBottom;
-
+	
 	self.firstVisibleElement = -1;
 	self.lastVisibleElement  = -1;
-
+	
 	self.scrollEdgeViewPadding = 0.0f;
-
+	
 	self.autoresizesSubviews = YES;
-    
-    self.shouldCenterSelectedItem = YES;
-    self.autoAnimateTimeout = 5.0;
-    
-    self.selectedBottomBorderWidth = 0.0f;
+	
+	self.shouldCenterSelectedItem = YES;
+	self.autoAnimateTimeout = 5.0;
+	
+	self.selectedBottomBorderWidth = 0.0f;
 }
 
 
@@ -94,14 +104,14 @@
 - (void)layoutSubviews {
 	[super layoutSubviews];
 	BOOL adjustWhenFinished = NO;
-
+	
 	if (CGPointEqualToPoint(self.selectionPoint, CGPointZero)) {
 		// default to the center
-        if (self.shouldCenterSelectedItem) {
-            self.selectionPoint = CGPointMake(self.frame.size.width / 2, 0.0f);
-        }
+		if (self.shouldCenterSelectedItem) {
+			self.selectionPoint = CGPointMake(self.frame.size.width / 2, 0.0f);
+		}
 	}
-
+	
 	if (!self.dataHasBeenLoaded) {
 		[self collectData];
 	}
@@ -110,47 +120,52 @@
 		[self updateScrollContentInset];
 		[self setTotalWidthOfScrollContent];
 	}
-
+	
 	SEL titleForElementSelector = @selector(horizontalPickerView:titleForElementAtIndex:);
 	SEL viewForElementSelector  = @selector(horizontalPickerView:viewForElementAtIndex:);
 	SEL setSelectedSelector     = @selector(setSelectedElement:);
-
+	
 	CGRect visibleBounds   = [self bounds];
 	CGRect scaledViewFrame = CGRectZero;
-
+	
 	// remove any subviews that are no longer visible
 	for (UIView *view in [_scrollView subviews]) {
 		scaledViewFrame = [_scrollView convertRect:[view frame] toView:self];
-
+		
 		// if the view doesn't intersect, it's not visible, so we can recycle it
 		if (!CGRectIntersectsRect(scaledViewFrame, visibleBounds)) {
-			[view removeFromSuperview];
+			// NO view recycling for VO - breaks the system
+			if (!UIAccessibilityIsVoiceOverRunning()) {
+				[view removeFromSuperview];
+			}
 		} else { // if it is still visible, update it's selected state
 			if ([view respondsToSelector:setSelectedSelector]) {
 				// view's tag is it's index
 				BOOL isSelected = (self.currentSelectedIndex == [self indexForElement:view]);
 				if (isSelected) {
 					// if this view is set to be selected, make sure it is over the selection point
-                    if (self.shouldCenterSelectedItem) {
-                        NSInteger currentIndex = [self nearestElementToCenter];
-                        isSelected = (currentIndex == self.currentSelectedIndex);
-                    }
+					if (self.shouldCenterSelectedItem) {
+						NSInteger currentIndex = [self nearestElementToCenter];
+						isSelected = (currentIndex == self.currentSelectedIndex);
+					}
 				}
 				// casting to V8HorizontalPickerLabel so we can call this without all the NSInvocation jazz
 				[(V8HorizontalPickerLabel *)view setSelectedElement:isSelected];
 			}
 		}
 	}
-
+	
 	// find needed elements by looking at left and right edges of frame
+	// We pre-load all the views if VO is running, otherwise this is painfully buggy.
 	CGPoint offset = _scrollView.contentOffset;
-	NSInteger firstNeededElement = [self nearestElementToPoint:CGPointMake(offset.x, 0.0f)];
-	NSInteger lastNeededElement  = [self nearestElementToPoint:CGPointMake(offset.x + visibleBounds.size.width, 0.0f)];
-
+	NSInteger firstNeededElement = (UIAccessibilityIsVoiceOverRunning()) ? 0 : [self nearestElementToPoint:CGPointMake(offset.x, 0.0f)];
+	NSInteger lastNeededElement  = (UIAccessibilityIsVoiceOverRunning()) ? self.numberOfElements - 1 : [self nearestElementToPoint:CGPointMake(offset.x + visibleBounds.size.width, 0.0f)];
+	
 	// add any views that have become visible
 	UIView *view = nil;
 	CGRect tmpViewFrame = CGRectZero;
 	CGPoint itemViewCenter = CGPointZero;
+	NSMutableArray *accessibilityElements = [NSMutableArray arrayWithCapacity:self.numberOfElements];
 	for (NSInteger i = firstNeededElement; i <= lastNeededElement; i++) {
 		view = nil; // paranoia
 		view = [_scrollView viewWithTag:[self tagForElementAtIndex:i]];
@@ -159,6 +174,10 @@
 				if (self.delegate && [self.delegate respondsToSelector:titleForElementSelector]) {
 					NSString *title = [self.delegate horizontalPickerView:self titleForElementAtIndex:i];
 					view = [self labelForForElementAtIndex:i withTitle:title];
+					view.accessibilityLabel = title.accessibilityLabel;
+					view.accessibilityValue = [NSString stringWithFormat:@"%ld of %ld", (long)i + 1, (long)self.numberOfElements];
+					V8HorizontalPickerLabel *label = (V8HorizontalPickerLabel *) view;
+					label.accessibilityDelegate = self;
 				} else if (self.delegate && [self.delegate respondsToSelector:viewForElementSelector]) {
 					view = [self.delegate horizontalPickerView:self viewForElementAtIndex:i];
 					// move view's center to the center of item's ideal frame
@@ -166,16 +185,24 @@
 					itemViewCenter = CGPointMake((tmpViewFrame.size.width / 2.0f) + tmpViewFrame.origin.x, (tmpViewFrame.size.height / 2.0f));
 					view.center = itemViewCenter;
 				}
-
+				
 				if (view) {
 					// use the index as the tag so we can find it later
 					view.tag = [self tagForElementAtIndex:i];
 					[_scrollView addSubview:view];
+					[accessibilityElements addObject:view];
 				}
 			}
 		}
+		
 	}
-
+	
+	/* We only want to set this once - we only reset it on a data reload,
+	 Not for every layoutSubviews call. */
+	if (self.accessibilityElements == nil) {
+		self.accessibilityElements = accessibilityElements;
+	}
+	
 	// add the left or right edge views if visible
 	CGRect viewFrame = CGRectZero;
 	if (self.leftScrollEdgeView) {
@@ -194,33 +221,33 @@
 			[_scrollView addSubview:self.rightScrollEdgeView];
 		}
 	}
-
+	
 	// save off what's visible now
 	self.firstVisibleElement = firstNeededElement;
 	self.lastVisibleElement  = lastNeededElement;
-
+	
 	// determine if scroll view needs to shift in response to resizing?
 	if (self.currentSelectedIndex > -1 && [self centerOfElementAtIndex:self.currentSelectedIndex] != [self currentCenter].x) {
 		if (adjustWhenFinished) {
 			[self scrollToElement:self.currentSelectedIndex animated:NO];
 		} else if (self.numberOfElements <= self.currentSelectedIndex) {
 			// if currentSelectedIndex no longer exists, select what is currently centered
-            if (self.shouldCenterSelectedItem) {
-                _currentSelectedIndex = [self nearestElementToCenter];
-                [self scrollToElement:self.currentSelectedIndex animated:NO];
-            }
+			if (self.shouldCenterSelectedItem) {
+				_currentSelectedIndex = [self nearestElementToCenter];
+				[self scrollToElement:self.currentSelectedIndex animated:NO];
+			}
 		}
 	}
-
-    if (!self.shouldCenterSelectedItem) {
-        if (_scrollView.frame.size.width > _scrollView.contentSize.width) {
-            CGFloat margin = (_scrollView.frame.size.width - _scrollView.contentSize.width) / 2.0;
-            [_scrollView setContentInset:UIEdgeInsetsMake(0.0, margin, 0.0, margin)];
-        } else {
-            [_scrollView setContentInset:UIEdgeInsetsZero];
-        }
-        [_scrollView setBounces:_scrollView.contentSize.width > _scrollView.frame.size.width];
-    }
+	
+	if (!self.shouldCenterSelectedItem) {
+		if (_scrollView.frame.size.width > _scrollView.contentSize.width) {
+			CGFloat margin = (_scrollView.frame.size.width - _scrollView.contentSize.width) / 2.0;
+			[_scrollView setContentInset:UIEdgeInsetsMake(0.0, margin, 0.0, margin)];
+		} else {
+			[_scrollView setContentInset:UIEdgeInsetsZero];
+		}
+		[_scrollView setBounces:_scrollView.contentSize.width > _scrollView.frame.size.width];
+	}
 }
 
 
@@ -251,9 +278,9 @@
 	[super setBackgroundColor:newColor];
 	_scrollView.backgroundColor = newColor;
 	
-    for (UIView *view in [_scrollView subviews]) {
-        view.backgroundColor = newColor;
-    }
+	for (UIView *view in [_scrollView subviews]) {
+		view.backgroundColor = newColor;
+	}
 }
 
 - (void)setIndicatorPosition:(V8HorizontalPickerIndicatorPosition)position {
@@ -269,7 +296,7 @@
 			[self.selectionIndicatorView removeFromSuperview];
 		}
 		_selectionIndicatorView = indicatorView;
-
+		
 		[self drawPositionIndicator];
 	}
 }
@@ -280,7 +307,7 @@
 			[self.leftEdgeView removeFromSuperview];
 		}
 		_leftEdgeView = leftView;
-
+		
 		CGRect tmpFrame = self.leftEdgeView.frame;
 		tmpFrame.origin.x = 0.0f;
 		tmpFrame.origin.y = 0.0f;
@@ -295,7 +322,7 @@
 			[self.rightEdgeView removeFromSuperview];
 		}
 		_rightEdgeView = rightView;
-
+		
 		CGRect tmpFrame = self.rightEdgeView.frame;
 		tmpFrame.origin.x = self.frame.size.width - tmpFrame.size.width;
 		tmpFrame.origin.y = 0.0f;
@@ -310,7 +337,7 @@
 			[self.leftScrollEdgeView removeFromSuperview];
 		}
 		_leftScrollEdgeView = leftView;
-
+		
 		self.scrollSizeHasBeenSet = NO;
 		[self setNeedsLayout];
 	}
@@ -322,7 +349,7 @@
 			[self.rightScrollEdgeView removeFromSuperview];
 		}
 		_rightScrollEdgeView = rightView;
-
+		
 		self.scrollSizeHasBeenSet = NO;
 		[self setNeedsLayout];
 	}
@@ -342,22 +369,24 @@
 	for (UIView *view in [_scrollView subviews]) {
 		[view removeFromSuperview];
 	}
-
+	
 	self.firstVisibleElement = NSIntegerMax;
 	self.lastVisibleElement  = NSIntegerMin;
-
+	
+	self.accessibilityElements = nil;
+	
 	[self collectData];
 }
 
 - (void)collectData {
 	self.scrollSizeHasBeenSet = NO;
 	self.dataHasBeenLoaded    = NO;
-
+	
 	[self getNumberOfElementsFromDataSource];
 	[self getElementWidthsFromDelegate];
 	[self setTotalWidthOfScrollContent];
 	[self updateScrollContentInset];
-
+	
 	self.dataHasBeenLoaded = YES;
 	[self setNeedsLayout];
 }
@@ -366,71 +395,71 @@
 #pragma mark - Scroll To Element Method
 - (void)scrollToElement:(NSInteger)index animated:(BOOL)animate {
 	_currentSelectedIndex = index;
-    if (self.shouldCenterSelectedItem) {
-        int x = [self centerOfElementAtIndex:index] - self.selectionPoint.x;
-        if (animate) {
-            [UIView animateWithDuration:0.2f animations:^(void) {
-                [_scrollView setContentOffset:CGPointMake(x, 0) animated:NO];
-            } completion:^(BOOL finished) {
-                if (finished) {
-                    [_scrollView setContentOffset:CGPointMake(x, 0) animated:animate];
-                    
-                    // notify delegate of the selected index
-                    SEL delegateCall = @selector(horizontalPickerView:didSelectElementAtIndex:);
-                    if (self.delegate && [self.delegate respondsToSelector:delegateCall]) {
-                        [self.delegate horizontalPickerView:self didSelectElementAtIndex:index];
-                    }
-                    
+	if (self.shouldCenterSelectedItem) {
+		int x = [self centerOfElementAtIndex:index] - self.selectionPoint.x;
+		if (animate) {
+			[UIView animateWithDuration:0.2f animations:^(void) {
+				[_scrollView setContentOffset:CGPointMake(x, 0) animated:NO];
+			} completion:^(BOOL finished) {
+				if (finished) {
+					[_scrollView setContentOffset:CGPointMake(x, 0) animated:animate];
+					
+					// notify delegate of the selected index
+					SEL delegateCall = @selector(horizontalPickerView:didSelectElementAtIndex:);
+					if (self.delegate && [self.delegate respondsToSelector:delegateCall]) {
+						[self.delegate horizontalPickerView:self didSelectElementAtIndex:index];
+					}
+					
 #if (__IPHONE_OS_VERSION_MAX_ALLOWED > __IPHONE_4_3)
-                    [self setNeedsLayout];
+					[self setNeedsLayout];
 #endif
-                }
-            }];
-        } else {
-            [_scrollView setContentOffset:CGPointMake(x, 0) animated:NO];
-            
-            // notify delegate of the selected index
-            SEL delegateCall = @selector(horizontalPickerView:didSelectElementAtIndex:);
-            if (self.delegate && [self.delegate respondsToSelector:delegateCall]) {
-                [self.delegate horizontalPickerView:self didSelectElementAtIndex:index];
-            }
-            
+				}
+			}];
+		} else {
+			[_scrollView setContentOffset:CGPointMake(x, 0) animated:NO];
+			
+			// notify delegate of the selected index
+			SEL delegateCall = @selector(horizontalPickerView:didSelectElementAtIndex:);
+			if (self.delegate && [self.delegate respondsToSelector:delegateCall]) {
+				[self.delegate horizontalPickerView:self didSelectElementAtIndex:index];
+			}
+			
 #if (__IPHONE_OS_VERSION_MAX_ALLOWED > __IPHONE_4_3)
-            [self setNeedsLayout];
+			[self setNeedsLayout];
 #endif
-        }
-    } else {
-        CGRect selectFrame = [self frameForElementAtIndex:index];
-        if (animate) {
-            [UIView animateWithDuration:0.2f animations:^(void) {
-                [_scrollView scrollRectToVisible:selectFrame animated:NO];
-            } completion:^(BOOL finished) {
-                if (finished) {
-                    // notify delegate of the selected index
-                    SEL delegateCall = @selector(horizontalPickerView:didSelectElementAtIndex:);
-                    if (self.delegate && [self.delegate respondsToSelector:delegateCall]) {
-                        [self.delegate horizontalPickerView:self didSelectElementAtIndex:index];
-                    }
-                    
+		}
+	} else {
+		CGRect selectFrame = [self frameForElementAtIndex:index];
+		if (animate) {
+			[UIView animateWithDuration:0.2f animations:^(void) {
+				[_scrollView scrollRectToVisible:selectFrame animated:NO];
+			} completion:^(BOOL finished) {
+				if (finished) {
+					// notify delegate of the selected index
+					SEL delegateCall = @selector(horizontalPickerView:didSelectElementAtIndex:);
+					if (self.delegate && [self.delegate respondsToSelector:delegateCall]) {
+						[self.delegate horizontalPickerView:self didSelectElementAtIndex:index];
+					}
+					
 #if (__IPHONE_OS_VERSION_MAX_ALLOWED > __IPHONE_4_3)
-                    [self setNeedsLayout];
+					[self setNeedsLayout];
 #endif
-                }
-            }];
-        } else {
-            [_scrollView scrollRectToVisible:selectFrame animated:NO];
-            
-            // notify delegate of the selected index
-            SEL delegateCall = @selector(horizontalPickerView:didSelectElementAtIndex:);
-            if (self.delegate && [self.delegate respondsToSelector:delegateCall]) {
-                [self.delegate horizontalPickerView:self didSelectElementAtIndex:index];
-            }
-            
+				}
+			}];
+		} else {
+			[_scrollView scrollRectToVisible:selectFrame animated:NO];
+			
+			// notify delegate of the selected index
+			SEL delegateCall = @selector(horizontalPickerView:didSelectElementAtIndex:);
+			if (self.delegate && [self.delegate respondsToSelector:delegateCall]) {
+				[self.delegate horizontalPickerView:self didSelectElementAtIndex:index];
+			}
+			
 #if (__IPHONE_OS_VERSION_MAX_ALLOWED > __IPHONE_4_3)
-            [self setNeedsLayout];
+			[self setNeedsLayout];
 #endif
-        }
-    }
+		}
+	}
 }
 
 
@@ -440,13 +469,13 @@
 		// NOTE: sizing and/or changing orientation of control might cause scrolling
 		//		 not initiated by user. do not update current selection in these
 		//		 cases so that the view state is properly preserved.
-
+		
 		// set the current item under the center to "highlighted" or current
-        if (self.shouldCenterSelectedItem) {
-            _currentSelectedIndex = [self nearestElementToCenter];
-        }
+		if (self.shouldCenterSelectedItem) {
+			_currentSelectedIndex = [self nearestElementToCenter];
+		}
 	}
-
+	
 #if (__IPHONE_OS_VERSION_MAX_ALLOWED > __IPHONE_4_3)
 	[self setNeedsLayout];
 #endif
@@ -459,26 +488,26 @@
 - (void)scrollViewDidEndDragging:(UIScrollView *)scrollView willDecelerate:(BOOL)decelerate {
 	// only do this if we aren't decelerating
 	if (!decelerate) {
-        if (self.shouldCenterSelectedItem) {
-            [self scrollToElementNearestToCenter];
-        }
+		if (self.shouldCenterSelectedItem) {
+			[self scrollToElementNearestToCenter];
+		}
 	}
-    
-    if (!self.shouldCenterSelectedItem) {
-        if (_animateToVisibleTimer) {
-            [self.animateToVisibleTimer invalidate];
-        }
-        
-        _animateToVisibleTimer = [NSTimer scheduledTimerWithTimeInterval:self.autoAnimateTimeout target:self selector:@selector(animateToVisible) userInfo:nil repeats:NO];
-    }
+	
+	if (!self.shouldCenterSelectedItem) {
+		if (_animateToVisibleTimer) {
+			[self.animateToVisibleTimer invalidate];
+		}
+		
+		_animateToVisibleTimer = [NSTimer scheduledTimerWithTimeInterval:self.autoAnimateTimeout target:self selector:@selector(animateToVisible) userInfo:nil repeats:NO];
+	}
 }
 
 //- (void)scrollViewWillBeginDecelerating:(UIScrollView *)scrollView { }
 
 - (void)scrollViewDidEndDecelerating:(UIScrollView *)scrollView {
-    if (self.shouldCenterSelectedItem) {
-        [self scrollToElementNearestToCenter];
-    }
+	if (self.shouldCenterSelectedItem) {
+		[self scrollToElementNearestToCenter];
+	}
 }
 
 - (void)scrollViewDidEndScrollingAnimation:(UIScrollView *)scrollView {
@@ -487,8 +516,10 @@
 
 - (void)animateToVisible
 {
-    [self.animateToVisibleTimer invalidate];
-    [self scrollToElement:self.currentSelectedIndex animated:YES];
+	[self.animateToVisibleTimer invalidate];
+	if (!UIAccessibilityIsVoiceOverRunning()) { // NEVER autoscroll for VO users. Very confusing.
+		[self scrollToElement:self.currentSelectedIndex animated:YES];
+	}
 }
 
 #pragma mark - View Creation Methods (Internal Methods)
@@ -509,10 +540,10 @@
 		_scrollView.decelerationRate = 0.1; //UIScrollViewDecelerationRateNormal;
 		_scrollView.autoresizingMask = UIViewAutoresizingFlexibleHeight | UIViewAutoresizingFlexibleWidth;
 		_scrollView.autoresizesSubviews = YES;
-
+		
 		UITapGestureRecognizer *tapRecognizer = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(scrollViewTapped:)];
 		[_scrollView addGestureRecognizer:tapRecognizer];
-
+		
 		[self addSubview:_scrollView];
 	}
 }
@@ -521,7 +552,7 @@
 	CGRect indicatorFrame = self.selectionIndicatorView.frame;
 	CGFloat x = self.selectionPoint.x - (indicatorFrame.size.width / 2);
 	CGFloat y;
-
+	
 	switch (self.indicatorPosition) {
 		case V8HorizontalPickerIndicatorTop: {
 			y = 0.0f;
@@ -534,7 +565,7 @@
 		default:
 			break;
 	}
-
+	
 	// properly place indicator image in view relative to selection point
 	CGRect tmpFrame = CGRectMake(x, y, indicatorFrame.size.width, indicatorFrame.size.height);
 	self.selectionIndicatorView.frame = tmpFrame;
@@ -545,25 +576,25 @@
 - (V8HorizontalPickerLabel *)labelForForElementAtIndex:(NSInteger)index withTitle:(NSString *)title {
 	CGRect labelFrame     = [self frameForElementAtIndex:index];
 	V8HorizontalPickerLabel *elementLabel = [[V8HorizontalPickerLabel alloc] initWithFrame:labelFrame];
-
+	
 	elementLabel.textAlignment   = NSTextAlignmentCenter;
 	elementLabel.backgroundColor = self.backgroundColor;
 	elementLabel.text            = title;
 	elementLabel.font            = self.elementFont;
-
-    elementLabel.normalStateFont = self.elementFont;
-    elementLabel.selectedStateFont = self.selectedElementFont;
+	
+	elementLabel.normalStateFont = self.elementFont;
+	elementLabel.selectedStateFont = self.selectedElementFont;
 	elementLabel.normalStateColor   = self.textColor;
 	elementLabel.selectedStateColor = self.selectedTextColor;
-    
-    elementLabel.selectedBottomBorderWidth = self.selectedBottomBorderWidth;
-
+	
+	elementLabel.selectedBottomBorderWidth = self.selectedBottomBorderWidth;
+	
 	// show selected status if this element is the selected one and is currently over selectionPoint
-    if (self.shouldCenterSelectedItem) {
-        NSInteger currentIndex = [self nearestElementToCenter];
-        elementLabel.selectedElement = (self.currentSelectedIndex == index) && (currentIndex == self.currentSelectedIndex);
-    }
-
+	if (self.shouldCenterSelectedItem) {
+		NSInteger currentIndex = [self nearestElementToCenter];
+		elementLabel.selectedElement = (self.currentSelectedIndex == index) && (currentIndex == self.currentSelectedIndex);
+	}
+	
 	return elementLabel;
 }
 
@@ -596,10 +627,10 @@
 // what is the total width of the content area?
 - (void)setTotalWidthOfScrollContent {
 	NSInteger totalWidth = 0;
-
+	
 	totalWidth += [self leftScrollEdgeWidth];
 	totalWidth += [self rightScrollEdgeWidth];
-
+	
 	// sum the width of all elements
 	for (NSNumber *width in self.elementWidths) {
 		totalWidth += [width intValue];
@@ -607,40 +638,40 @@
 	}
 	// TODO: is this necessary?
 	totalWidth -= self.elementPadding; // we add "one too many" in for loop
-
+	
 	if (_scrollView) {
 		// create our scroll view as wide as all the elements to be included
-        // contentSize needs a non-zero width and height, otherwise, scrollRectToVisible
-        // won't work
-        if (self.bounds.size.height <= 0) {
-            _scrollView.contentSize = CGSizeMake(totalWidth, 1); //self.bounds.size.height);
-        } else {
-            _scrollView.contentSize = CGSizeMake(totalWidth, self.bounds.size.height);
-        }
-        
+		// contentSize needs a non-zero width and height, otherwise, scrollRectToVisible
+		// won't work
+		if (self.bounds.size.height <= 0) {
+			_scrollView.contentSize = CGSizeMake(totalWidth, 1); //self.bounds.size.height);
+		} else {
+			_scrollView.contentSize = CGSizeMake(totalWidth, self.bounds.size.height);
+		}
+		
 		self.scrollSizeHasBeenSet = YES;
 	}
 }
 
 // reset the content inset of the scroll view based on centering first and last elements.
 - (void)updateScrollContentInset {
-    // No need to set the content inset if we don't center the items, we'll just keep
-    // them with no margins on the left/right
-    if (!self.shouldCenterSelectedItem) {
-        return;
-    }
-
-    // update content inset if we have element widths
+	// No need to set the content inset if we don't center the items, we'll just keep
+	// them with no margins on the left/right
+	if (!self.shouldCenterSelectedItem) {
+		return;
+	}
+	
+	// update content inset if we have element widths
 	if ([self.elementWidths count] != 0) {
 		CGFloat scrollerWidth = _scrollView.frame.size.width;
-
+		
 		CGFloat halfFirstWidth = 0.0f;
 		CGFloat halfLastWidth  = 0.0f;
 		if ( [self.elementWidths count] > 0 ) {
-			halfFirstWidth = [[self.elementWidths objectAtIndex:0] floatValue] / 2.0; 
+			halfFirstWidth = [[self.elementWidths objectAtIndex:0] floatValue] / 2.0;
 			halfLastWidth  = [[self.elementWidths lastObject] floatValue]      / 2.0;
 		}
-
+		
 		// calculating the inset so that the bouncing on the ends happens more smooothly
 		// - first inset is the distance from the left edge to the left edge of the
 		//     first element when that element is centered under the selection point.
@@ -657,7 +688,7 @@
 		firstInset -= [self leftScrollEdgeWidth];
 		CGFloat lastInset  = (scrollerWidth - self.selectionPoint.x) - halfLastWidth;
 		lastInset -= [self rightScrollEdgeWidth];
-
+		
 		_scrollView.contentInset = UIEdgeInsetsMake(0, firstInset, 0, lastInset);
 	}
 }
@@ -668,9 +699,9 @@
 	if (index >= [self.elementWidths count]) {
 		return 0;
 	}
-
+	
 	offset += [self leftScrollEdgeWidth];
-
+	
 	for (int i = 0; i < index && i < [self.elementWidths count]; i++) {
 		offset += [[self.elementWidths objectAtIndex:i] intValue];
 		offset += self.elementPadding;
@@ -693,7 +724,7 @@
 	if (index >= [self.elementWidths count]) {
 		return 0;
 	}
-
+	
 	NSInteger elementOffset = [self offsetForElementAtIndex:index];
 	NSInteger elementWidth  = [[self.elementWidths objectAtIndex:index] intValue] / 2;
 	return elementOffset + elementWidth;
@@ -803,7 +834,7 @@
 
 // move scroll view to position nearest element under the center
 - (void)scrollToElementNearestToCenter {
-    [self scrollToElement:[self nearestElementToCenter] animated:YES];
+	[self scrollToElement:[self nearestElementToCenter] animated:YES];
 }
 
 
@@ -819,6 +850,32 @@
 	}
 }
 
+#pragma mark - Accessibility
+
+/* This auto scrolls our scroll view much like it would if it were a collection view.
+ As the user moves forward and backwards, we bring the next/prev elements into view
+ for VO.
+ */
+- (void) v8HorizontalPickerLabelDidBecomeAccessibilityFocused:(V8HorizontalPickerLabel *)label {
+	
+	const CGFloat scrollTriggerX = 10.0;
+	CGRect scrollBounds = _scrollView.bounds;
+	CGRect labelFrame = label.frame;
+	CGRect scrollToFrame = labelFrame;
+	
+	if (CGRectGetMaxX(labelFrame) + scrollTriggerX > CGRectGetMaxX(scrollBounds)) {
+		scrollToFrame.origin.x += labelFrame.size.width;
+	} else if (CGRectGetMinX(labelFrame) - scrollTriggerX < CGRectGetMinX(scrollBounds)) {
+		scrollToFrame.origin.x -= labelFrame.size.width;
+	}
+	
+	if (!CGRectEqualToRect(labelFrame, scrollToFrame)) {
+		[_scrollView scrollRectToVisible:scrollToFrame animated:YES];
+		UIAccessibilityPostNotification(UIAccessibilityLayoutChangedNotification, label);
+		
+	}
+}
+
 @end
 
 
@@ -830,20 +887,22 @@
 	if (self.selectedElement != selected) {
 		if (selected) {
 			self.textColor = self.selectedStateColor;
-            self.font = self.selectedStateFont;
-
-            if (self.selectedBottomBorderWidth > 0) {
-                CALayer *layer = [self layer];
-                CALayer *bottomBorder = [CALayer layer];
-                bottomBorder.borderColor = [self textColor].CGColor;
-                bottomBorder.borderWidth = self.selectedBottomBorderWidth;
-                bottomBorder.frame = CGRectMake(-1, layer.frame.size.height - self.selectedBottomBorderWidth, layer.frame.size.width, self.selectedBottomBorderWidth);
-                [bottomBorder setBorderColor:[self textColor].CGColor];
-                [layer addSublayer:bottomBorder];
-            }
-        } else {
+			self.font = self.selectedStateFont;
+			self.accessibilityTraits |= UIAccessibilityTraitSelected;
+			
+			if (self.selectedBottomBorderWidth > 0) {
+				CALayer *layer = [self layer];
+				CALayer *bottomBorder = [CALayer layer];
+				bottomBorder.borderColor = [self textColor].CGColor;
+				bottomBorder.borderWidth = self.selectedBottomBorderWidth;
+				bottomBorder.frame = CGRectMake(-1, layer.frame.size.height - self.selectedBottomBorderWidth, layer.frame.size.width, self.selectedBottomBorderWidth);
+				[bottomBorder setBorderColor:[self textColor].CGColor];
+				[layer addSublayer:bottomBorder];
+			}
+		} else {
 			self.textColor = self.normalStateColor;
-            self.font = self.normalStateFont;
+			self.font = self.normalStateFont;
+			self.accessibilityTraits &= (~UIAccessibilityTraitSelected);
 		}
 		_selectedElement = selected;
 		[self setNeedsLayout];
@@ -856,6 +915,11 @@
 		self.textColor = self.normalStateColor;
 		[self setNeedsLayout];
 	}
+}
+
+- (void)accessibilityElementDidBecomeFocused
+{
+	[self.accessibilityDelegate v8HorizontalPickerLabelDidBecomeAccessibilityFocused:self];
 }
 
 @end
