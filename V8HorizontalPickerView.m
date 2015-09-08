@@ -38,6 +38,9 @@
 
 @property (nonatomic, strong) NSTimer *animateToVisibleTimer;
 
+// Accessibility Elements - iOS7 replacement for accessibilityElements
+@property (nonatomic, strong) NSArray *accessibleElements;
+
 @end
 
 #pragma mark - Implementation
@@ -97,6 +100,7 @@
 	self.autoAnimateTimeout = 5.0;
 	
 	self.selectedBottomBorderWidth = 0.0f;
+    self.accessibleElements = [NSArray array];
 }
 
 
@@ -199,8 +203,8 @@
 	
 	/* We only want to set this once - we only reset it on a data reload,
 	 Not for every layoutSubviews call. */
-	if (self.accessibilityElements == nil) {
-		self.accessibilityElements = accessibilityElements;
+	if ([self.accessibleElements count] == 0) {
+        self.accessibleElements = accessibilityElements;
 	}
 	
 	// add the left or right edge views if visible
@@ -248,6 +252,19 @@
 		}
 		[_scrollView setBounces:_scrollView.contentSize.width > _scrollView.frame.size.width];
 	}
+}
+
+#pragma mark - UIAccessibilityContainer Protocol
+- (NSInteger)accessibilityElementCount{
+    return [self.accessibleElements count];
+}
+
+- (id)accessibilityElementAtIndex:(NSInteger)index{
+    return [self.accessibleElements objectAtIndex:index];
+}
+
+- (NSInteger)indexOfAccessibilityElement:(id)element{
+    return [self.accessibleElements indexOfObject:element];
 }
 
 
