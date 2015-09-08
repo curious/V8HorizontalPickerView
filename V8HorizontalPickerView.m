@@ -390,7 +390,7 @@
 	self.firstVisibleElement = NSIntegerMax;
 	self.lastVisibleElement  = NSIntegerMin;
 	
-	self.accessibilityElements = nil;
+    self.accessibleElements = nil;
 	
 	[self collectData];
 }
